@@ -1,0 +1,4 @@
+node_modules/
+research/raw/
+research/debug-*.svg
+research/debug-*.png

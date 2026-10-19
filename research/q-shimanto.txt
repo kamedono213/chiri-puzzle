@@ -1,0 +1,1 @@
+[out:json][timeout:120];area["ISO3166-1"="JP"]->.jp;(relation["waterway"]["name"~"四万十川"](area.jp);way["waterway"="river"]["name"="四万十川"](area.jp););out geom;

@@ -1,0 +1,143 @@
+<title>ちりパズル</title>
+<meta name="description" content="山地・川・平野・半島・気候のカードを、白地図の正しい場所にはめていく地理パズル。日本編と世界編。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap">
+<style>
+/* 地図帳のページのような明るい配色。海は水色、陸はクリーム色。カードは厚紙のタイル */
+:root {
+  --sea: #cfe8f3;
+  --sea2: #b6dbeb;
+  --land: #fbf3df;
+  --land-line: #8a7a5c;
+  --border: #c9b994;
+  --river: #2f7fd1;
+  --bg: #f4efe4;
+  --card: #ffffff;
+  --ink: #2b2a26;
+  --sub: #6d675b;
+  --line: #e2d9c6;
+  --accent: #e8743b;     /* 朱色: 選んでいるカード */
+  --accent-ink: #ffffff;
+  --ok: #2f9e6b;
+  --ng: #d6455a;
+  --hint: #f2b632;
+  --mount: #a4673b;
+  --plain: #6aa84f;
+  --pen: #8e5fb8;
+  --climate: #d9822b;
+  --cont: #3f7fbf;
+  --display: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Yu Gothic", sans-serif;
+  --body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  --r: 14px;
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.6; -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; cursor: pointer; }
+/* ふりがな: 親文字の字間を広げないよう、読みを上にはみ出させて置く */
+ruby { display: inline-block; position: relative; text-indent: 0; }
+ruby rt { display: block; position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); font-size: 0.5em; font-weight: 700; line-height: 1.1; letter-spacing: 0; white-space: nowrap; }
+#app { max-width: 720px; margin: 0 auto; min-height: 100%; }
+
+/* ---------- ホーム・一覧 */
+.page { padding: 18px 16px 40px; }
+.top { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.top h1, .top h2 { margin: 0; font-family: var(--display); font-weight: 800; }
+.top h1 { font-size: 34px; letter-spacing: 0.04em; }
+.top h2 { font-size: 22px; }
+.top .grow { flex: 1; }
+.back { border: 0; background: var(--card); border-radius: 999px; width: 40px; height: 40px; font-size: 20px; box-shadow: 0 1px 0 var(--line), 0 0 0 1px var(--line) inset; }
+.link { border: 0; background: none; color: var(--sub); font-size: 14px; padding: 6px 4px; }
+.lead { color: var(--sub); margin: 0 0 18px; font-size: 15px; }
+.hero { position: relative; border-radius: 20px; overflow: hidden; background: var(--sea); margin-bottom: 18px; aspect-ratio: 2 / 1; }
+.hero svg { width: 100%; height: 100%; display: block; }
+.areas { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 22px; }
+.area { border: 0; border-radius: 18px; padding: 18px 14px; text-align: left; background: var(--card); box-shadow: 0 3px 0 var(--line), 0 0 0 1.5px var(--line) inset; }
+.area b { display: block; font-family: var(--display); font-size: 24px; font-weight: 800; }
+.area span { color: var(--sub); font-size: 13px; }
+.area:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--line), 0 0 0 1.5px var(--line) inset; }
+.levels { display: flex; gap: 6px; background: var(--card); padding: 5px; border-radius: 999px; box-shadow: 0 0 0 1.5px var(--line) inset; margin-bottom: 8px; }
+.levels button { flex: 1; border: 0; background: none; border-radius: 999px; padding: 9px 4px; font-family: var(--display); font-weight: 700; font-size: 15px; color: var(--sub); }
+.levels button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.levelnote { color: var(--sub); font-size: 13px; margin: 0 4px 18px; }
+.cats { display: grid; gap: 10px; }
+.cat { display: grid; grid-template-columns: 48px 1fr auto; align-items: center; gap: 12px; border: 0; text-align: left; background: var(--card); border-radius: var(--r); padding: 12px 14px; box-shadow: 0 2px 0 var(--line), 0 0 0 1.5px var(--line) inset; }
+.cat .ic { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 26px; }
+.cat b { font-family: var(--display); font-size: 18px; display: block; }
+.cat small { color: var(--sub); font-size: 13px; }
+.cat .prog { font-family: var(--display); font-weight: 800; color: var(--sub); font-size: 14px; white-space: nowrap; }
+.stages { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.stage { border: 0; border-radius: var(--r); background: var(--card); padding: 14px 12px; text-align: left; box-shadow: 0 2px 0 var(--line), 0 0 0 1.5px var(--line) inset; }
+.stage b { font-family: var(--display); font-size: 17px; display: block; }
+.stage small { color: var(--sub); font-size: 12px; display: block; margin: 2px 0 6px; line-height: 1.4; }
+.stars { color: #e8b923; font-size: 18px; letter-spacing: 1px; }
+.stars .off { color: #ddd3bd; }
+.howto { margin-top: 26px; background: var(--card); border-radius: var(--r); padding: 14px 16px; font-size: 14px; color: var(--sub); box-shadow: 0 0 0 1.5px var(--line) inset; }
+.howto b { color: var(--ink); }
+.howto ol { margin: 6px 0 0; padding-left: 1.3em; }
+.foot { margin-top: 18px; font-size: 12px; color: var(--sub); }
+.foot a { color: inherit; }
+
+/* ---------- パズル画面 */
+.play { height: 100dvh; display: grid; grid-template-rows: auto 1fr auto auto; }
+.bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px 8px; background: var(--bg); }
+.bar .ttl { flex: 1; min-width: 0; font-family: var(--display); font-weight: 800; font-size: 16px; line-height: 1.3; }
+.bar .ttl small { display: block; color: var(--sub); font-weight: 700; font-size: 12px; }
+.count { font-family: var(--display); font-weight: 800; font-size: 15px; background: var(--card); border-radius: 999px; padding: 4px 12px; box-shadow: 0 0 0 1.5px var(--line) inset; white-space: nowrap; }
+.mapbox { position: relative; background: var(--sea); overflow: hidden; touch-action: none; }
+.mapbox svg { width: 100%; height: 100%; display: block; }
+.zoom { position: absolute; right: 8px; top: 8px; display: grid; gap: 6px; }
+.zoom button { width: 40px; height: 40px; border-radius: 10px; border: 0; background: rgba(255,255,255,.92); font-size: 20px; font-weight: 800; box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+.toast { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); background: rgba(43,42,38,.9); color: #fff; padding: 8px 14px; border-radius: 999px; font-size: 14px; font-weight: 700; white-space: nowrap; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; pointer-events: none; transition: opacity .25s; }
+.hints { display: flex; gap: 8px; padding: 8px 10px; background: var(--card); border-top: 1.5px solid var(--line); overflow-x: auto; }
+.hints button { flex: 1 0 auto; border: 0; border-radius: 12px; padding: 8px 10px; background: #fff7df; box-shadow: 0 0 0 1.5px #f0dca0 inset; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.hints button:disabled { opacity: .45; }
+.hints button:not(:disabled):active { background: #ffefb8; }
+.tray { background: var(--card); padding: 6px 10px calc(10px + env(safe-area-inset-bottom, 0px)); display: flex; flex-wrap: wrap; gap: 8px; max-height: 32dvh; overflow-y: auto; align-content: flex-start; }
+.tray .lab { width: 100%; font-size: 12px; color: var(--sub); font-weight: 700; }
+.piece { border: 0; border-radius: 12px; padding: 13px 12px 6px; font-family: var(--display); font-weight: 800; font-size: 17px; line-height: 1.35; background: #fff; box-shadow: 0 3px 0 #d8ccb2, 0 0 0 2px #d8ccb2 inset; transition: transform .1s; }
+.piece[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: 0 3px 0 #b2522a, 0 0 0 2px #b2522a inset; transform: translateY(-2px); }
+.piece.shake { animation: shake .35s; }
+@keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+
+
+/* 地図の中 */
+.slot .dot { stroke: #fff; stroke-width: 2.5px; }
+.slot .hit { fill: transparent; }
+.slot text { font-family: var(--display); font-weight: 800; fill: #fff; pointer-events: none; }
+.slot.open .dot { fill: var(--ink); }
+.slot.dim { opacity: .25; }
+.slot.cand .dot { fill: var(--accent); }
+.slot.done .dot { fill: var(--ok); }
+.slot.miss .dot { fill: var(--ng); }
+.slot.miss { animation: pop .35s; }
+@keyframes pop { 50% { transform: scale(1.35); } }
+.label { font-family: var(--display); font-weight: 800; paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; fill: var(--ink); pointer-events: none; }
+.area-poly { fill-opacity: .28; stroke-width: 1.2px; vector-effect: non-scaling-stroke; }
+.riverline { fill: none; stroke: var(--river); stroke-width: 3px; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.riverline.done { stroke: var(--ok); }
+.ring { fill: rgba(242,182,50,.16); stroke: var(--hint); stroke-width: 3px; stroke-dasharray: 8 6; vector-effect: non-scaling-stroke; pointer-events: none; }
+
+/* ヒント・結果のシート */
+.sheet-bg { position: fixed; inset: 0; background: rgba(30,28,22,.38); display: flex; align-items: flex-end; justify-content: center; z-index: 10; }
+.sheet { width: 100%; max-width: 560px; background: var(--card); border-radius: 20px 20px 0 0; padding: 18px 18px calc(20px + env(safe-area-inset-bottom, 0px)); max-height: 82dvh; overflow-y: auto; animation: up .2s ease-out; }
+@keyframes up { from { transform: translateY(30px); opacity: 0; } }
+.sheet h3 { margin: 6px 0 4px; line-height: 1.9; font-family: var(--display); font-size: 20px; font-weight: 800; }
+.sheet .tag { display: inline-block; font-size: 12px; font-weight: 700; color: var(--sub); background: var(--bg); border-radius: 999px; padding: 2px 10px; margin-bottom: 8px; }
+.sheet p { margin: 6px 0 12px; font-size: 16px; line-height: 2.1; }
+.sheet .src { font-size: 11px; color: var(--sub); }
+.sheet .btns { display: grid; gap: 8px; margin-top: 14px; }
+.btn { border: 0; border-radius: 14px; padding: 13px; font-family: var(--display); font-weight: 800; font-size: 17px; background: var(--bg); box-shadow: 0 0 0 1.5px var(--line) inset; }
+.btn.main { background: var(--ink); color: #fff; box-shadow: none; }
+.result { text-align: center; }
+.result .big { font-size: 44px; color: #e8b923; letter-spacing: 4px; }
+.result .big .off { color: #e6dcc6; }
+.chart { width: 100%; max-width: 360px; display: block; margin: 4px auto 6px; }
+.chart text { font-size: 10px; fill: var(--sub); font-family: var(--body); }
+</style>
+<div id="app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="app.js"></script>
