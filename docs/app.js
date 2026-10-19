@@ -131,8 +131,8 @@ function home() {
     <div class="areas">${Object.entries(AREAS).map(([k, a]) => `<button class="area" data-area="${k}"><b>${a.name}へん</b><span>${a.sub}</span></button>`).join('')}</div>
     ${levelsHTML()}
     <div class="howto"><b>あそびかた</b><ol>
-      <li>下のカードを1まいえらぶ</li>
-      <li>地図の番号をタップして、はめる</li>
+      <li>下のカードを、番号までドラッグする</li>
+      <li>カードをタップしてから、地図の番号をタップしても、はめられる</li>
       <li>こまったら、ヒント。<b>何回つかっても、星はへらない</b>よ</li></ol></div>
     <p class="foot">地図・位置: Natural Earth, OpenStreetMap(© OpenStreetMap contributors), Wikipedia/Wikidata。気候: 気象庁の平年値(1991〜2020年)、英語版Wikipediaの気候表。レベル分けは目安です。</p>
   </div>`;
@@ -287,18 +287,71 @@ function play(area, cat, key) {
   }
   S.drawSlots = drawSlots;
 
+  // --- カードを番号までドラッグしてはめる(カードをタップ→番号をタップ、でもはめられる)
+  let drag = null, dragJustEnded = false;
+  // 指の下、なければ指から36px以内でいちばん近い、まだ空いている番号
+  function slotNear(x, y) {
+    let best = null, bd = 36;
+    app.querySelectorAll('#slots .slot:not(.done)').forEach(el => {
+      const r = el.querySelector('.dot').getBoundingClientRect();
+      const d = Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y);
+      if (d < bd) { bd = d; best = el; }
+    });
+    return best;
+  }
+  function startDrag(ev, b) {
+    if (ev.button > 0 || S.done) return;
+    drag = { id: b.dataset.card, b, x0: ev.clientX, y0: ev.clientY, ghost: null, over: null };
+    try { b.setPointerCapture(ev.pointerId); } catch (e) { /* 取れなくても動く */ }
+    b.onpointermove = moveDrag; b.onpointerup = endDrag; b.onpointercancel = () => stopDrag();
+  }
+  function moveDrag(ev) {
+    if (!drag) return;
+    if (!drag.ghost) {
+      if (Math.hypot(ev.clientX - drag.x0, ev.clientY - drag.y0) < 8) return; // 少し動くまではタップあつかい
+      if (S.sel !== drag.id) { S.sel = drag.id; S.cand = null; clearRing(); SE.play('select'); updHints(); drawSlots(); }
+      const g = drag.b.cloneNode(true);
+      g.classList.add('ghost'); g.setAttribute('aria-pressed', 'true'); g.removeAttribute('data-card');
+      document.body.appendChild(g); drag.ghost = g;
+      drag.b.classList.add('lifted');
+    }
+    drag.ghost.style.left = ev.clientX + 'px'; drag.ghost.style.top = ev.clientY + 'px';
+    const over = slotNear(ev.clientX, ev.clientY);
+    if (over !== drag.over) { if (drag.over) drag.over.classList.remove('hover'); if (over) over.classList.add('hover'); drag.over = over; }
+  }
+  function stopDrag() {
+    if (!drag) return null;
+    const d = drag; drag = null;
+    if (d.ghost) d.ghost.remove();
+    if (d.over) d.over.classList.remove('hover');
+    d.b.classList.remove('lifted');
+    d.b.onpointermove = d.b.onpointerup = d.b.onpointercancel = null;
+    return d;
+  }
+  function endDrag() {
+    const d = stopDrag();
+    if (!d || !d.ghost) return; // 動かしていない = ふつうのタップ(onclick に任せる)
+    dragJustEnded = true; setTimeout(() => { dragJustEnded = false; }, 400);
+    if (d.over) tapSlot(d.over.dataset.id);
+    else { toast('番号の上で、指をはなしてね'); drawTray(); }
+  }
+
   // --- カード
   function drawTray() {
     const left = S.cards.filter(id => !S.used || !S.used.has(id));
     const tray = app.querySelector('#tray');
     tray.innerHTML = left.length
-      ? `<div class="lab">${S.sel ? 'えらんだカードの場所を、地図の番号からさがそう' : 'カードを1まいえらぼう'}</div>` + left.map(id => {
+      ? `<div class="lab">${S.sel ? 'えらんだカードの場所を、地図の番号からさがそう' : 'カードを1まいえらんで、番号までドラッグしよう(タップでもOK)'}</div>` + left.map(id => {
         const it = items.find(i => i.id === id);
         return `<button class="piece" data-card="${id}" aria-pressed="${S.sel === id}">${nameHTML(cardSegs(area, it))}</button>`;
       }).join('')
       : `<div class="lab">ぜんぶ、はまったよ!</div>`;
-    tray.querySelectorAll('[data-card]').forEach(b => b.onclick = () => {
-      S.sel = S.sel === b.dataset.card ? null : b.dataset.card; S.cand = null; clearRing(); SE.play('select'); drawTray(); drawSlots(); updHints();
+    tray.querySelectorAll('[data-card]').forEach(b => {
+      b.onclick = () => {
+        if (dragJustEnded) { dragJustEnded = false; return; } // ドラッグの直後に来る click は無視
+        S.sel = S.sel === b.dataset.card ? null : b.dataset.card; S.cand = null; clearRing(); SE.play('select'); drawTray(); drawSlots(); updHints();
+      };
+      b.addEventListener('pointerdown', ev => startDrag(ev, b));
     });
     app.querySelector('#count').textContent = `${S.placed.size} / ${items.length}`;
   }

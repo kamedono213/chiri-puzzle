@@ -113,6 +113,10 @@ ruby rt { display: block; position: absolute; left: 50%; bottom: 100%; transform
 .piece { border: 0; border-radius: 12px; padding: 13px 12px 6px; font-family: var(--display); font-weight: 800; font-size: 17px; line-height: 1.35; background: #fff; box-shadow: 0 3px 0 #d8ccb2, 0 0 0 2px #d8ccb2 inset; transition: transform .1s; }
 .piece[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: 0 3px 0 #b2522a, 0 0 0 2px #b2522a inset; transform: translateY(-2px); }
 .piece.shake { animation: shake .35s; }
+/* ドラッグ: カードは指で動かすので、カードの上ではページをスクロールしない */
+.piece { touch-action: none; user-select: none; -webkit-user-select: none; }
+.piece.lifted { opacity: .35; }
+.piece.ghost { position: fixed; z-index: 30; pointer-events: none; transform: translate(-50%, -130%) scale(1.06); background: var(--accent); color: var(--accent-ink); box-shadow: 0 10px 24px rgba(0,0,0,.25), 0 0 0 2px #b2522a inset; }
 @keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
 
 
@@ -125,6 +129,8 @@ ruby rt { display: block; position: absolute; left: 50%; bottom: 100%; transform
 .slot.cand .dot { fill: var(--accent); }
 .slot.done .dot { fill: var(--ok); }
 .slot.miss .dot { fill: var(--ng); }
+.slot.hover .dot { fill: var(--accent); stroke-width: 4px; }
+.slot.hover { opacity: 1; }
 .slot.miss { animation: pop .35s; }
 @keyframes pop { 50% { transform: scale(1.35); } }
 .label { font-family: var(--display); font-weight: 800; paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; fill: var(--ink); pointer-events: none; }
