@@ -10,6 +10,21 @@ const store = {
   set(k, v) { try { localStorage.setItem('chiri:' + k, JSON.stringify(v)); } catch (e) { /* 保存できなくても遊べる */ } },
 };
 
+// ---------- ふりがな(iPhone対策)
+// <ruby>漢字<rt>よみ</rt></ruby> を <span class="rb">漢字<span class="rt">よみ</span></span> に置きかえる。
+// 画面に入った直後(描画の前)に置きかえるので、ちらつかない
+function fixRuby(root) {
+  root.querySelectorAll('ruby').forEach(r => {
+    const rt = r.querySelector('rt'), yomi = rt ? rt.textContent : '';
+    if (rt) rt.remove();
+    const s = document.createElement('span'); s.className = 'rb'; s.innerHTML = r.innerHTML;
+    const t = document.createElement('span'); t.className = 'rt'; t.textContent = yomi; s.appendChild(t);
+    r.replaceWith(s);
+  });
+}
+new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) fixRuby(n.tagName === 'RUBY' ? n.parentNode : n); })
+  .observe(document.documentElement, { childList: true, subtree: true });
+
 // ---------- 効果音(Web Audio で合成。音声ファイルは使わない)
 const SE = {
   ctx: null,

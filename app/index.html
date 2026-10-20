@@ -37,9 +37,10 @@
 html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.6; -webkit-tap-highlight-color: transparent; }
 button { font: inherit; color: inherit; cursor: pointer; }
-/* ふりがな: 親文字の字間を広げないよう、読みを上にはみ出させて置く */
-ruby { display: inline-block; position: relative; text-indent: 0; }
-ruby rt { display: block; position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); font-size: 0.5em; font-weight: 700; line-height: 1.1; letter-spacing: 0; white-space: nowrap; }
+/* ふりがな: 親文字の字間を広げないよう、読みを上にはみ出させて置く。
+   iPhone(Safari)は <ruby> の配置を変えられないので、app.js が <ruby> を .rb/.rt の span に置きかえる */
+.rb { display: inline-block; position: relative; text-indent: 0; }
+.rb > .rt { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); font-size: 0.5em; font-weight: 700; line-height: 1.1; letter-spacing: 0; white-space: nowrap; }
 #app { max-width: 720px; margin: 0 auto; min-height: 100%; }
 
 /* ---------- ホーム・一覧 */
