@@ -135,6 +135,16 @@ ruby rt { display: block; position: absolute; left: 50%; bottom: 100%; transform
 @keyframes pop { 50% { transform: scale(1.35); } }
 .label { font-family: var(--display); font-weight: 800; paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; fill: var(--ink); pointer-events: none; }
 .area-poly { fill-opacity: .28; stroke-width: 1.2px; vector-effect: non-scaling-stroke; }
+.area-poly.done { fill-opacity: .6; }
+/* 形のピース */
+.piece.shape-piece { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 10px 6px; min-width: 84px; }
+.piece .shape { display: block; }
+.piece .shape path { fill: #f3c9a8; stroke: #8a5a3a; stroke-width: 1.2px; vector-effect: non-scaling-stroke; }
+.piece[aria-pressed="true"] .shape path, .piece.ghost .shape path { fill: #ffe9d6; stroke: #fff; }
+.piece .nm { font-size: 15px; line-height: 1.3; }
+.sheet h3 .shape { vertical-align: middle; }
+.sheet h3 .shape path { fill: #f3c9a8; stroke: #8a5a3a; stroke-width: 1.2px; vector-effect: non-scaling-stroke; }
+.levels.modes button small { display: block; font-size: 11px; font-weight: 700; opacity: .8; }
 .riverline { fill: none; stroke: var(--river); stroke-width: 3px; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .riverline.done { stroke: var(--ok); }
 .ring { fill: rgba(242,182,50,.16); stroke: var(--hint); stroke-width: 3px; stroke-dasharray: 8 6; vector-effect: non-scaling-stroke; pointer-events: none; }

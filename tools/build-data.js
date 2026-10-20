@@ -10,6 +10,11 @@ const d3 = require('d3-geo');
 const topojsonServer = require('topojson-server');
 const topojsonSimplify = require('topojson-simplify');
 const topojson = require('topojson-client');
+const SHAPES = require('./shapes');
+// 「|」で区切る。ただし {漢字|よみ} の中の「|」では切らない
+// 地図にぬる範囲は、ピースと同じ形(はなれた島や海外領土を入れると、ステージの表示範囲が広がりすぎる)
+const withArea = shape => ({ shape, area: shape.d });
+function splitOutside(str) { const out = ['']; let depth = 0; for (const ch of str) { if (ch === '{') depth++; if (ch === '}') depth--; if (ch === '|' && !depth) out.push(''); else out[out.length - 1] += ch; } return out; }
 
 const R = p => path.join(__dirname, '../research', p);
 const D = p => path.join(__dirname, '../data', p);
@@ -239,7 +244,26 @@ function buildJapan() {
     if (!ok) fail('気候の検算に合わない ' + c.city + ' ' + c.key);
   }
   for (const t of Object.values(JP_CLIMATE)) checkRuby(t.hint, t.name);
-  return { w: W, h: H, inset, land, borders, prefs: prefShapes, lakes, items: out.concat(climate), climateTypes: JP_CLIMATE };
+  // 都道府県(形パズル)と県庁所在地
+  const capJ = readJSON(R('capitals-jp.json'));
+  const prefFeats = topojson.feature(topo, obj).features;
+  const prefItems = [], capItems = [];
+  for (const l of fs.readFileSync(D('prefs.txt'), 'utf8').split(/\r?\n/).filter(l => l && !l.startsWith('#'))) {
+    const t = l.split('|'), [pn, py, cn, cy] = t, [ph, ch] = splitOutside(t.slice(4).join('|'));
+    const short = pn === '北海道' ? pn : pn.replace(/[都府県]$/, '');
+    const f = prefFeats.find(f => f.properties.name === pn);
+    if (!f) { fail('県の形なし ' + pn); continue; }
+    const slot = SHAPES.slotPoint(f.geometry);
+    const region = regionOf([short]);
+    prefItems.push({ id: 'jp-pref-' + pn, cat: 'pref', lv: 1, segs: [{ t: pn, r: py }], title: pn, region, hint: ph, x: f1(slot[0]), y: f1(slot[1]), ...withArea(SHAPES.piece(f.geometry)) });
+    const c = capJ[short]; if (!c || !c.coord) { fail('県庁所在地の位置なし ' + pn); continue; }
+    const p = P(c.coord);
+    capItems.push({ id: 'jp-capital-' + cn, cat: 'capital', lv: 1, segs: [{ t: cn, r: cy }], title: cn, pref: pn, region, hint: ch, x: f1(p[0]), y: f1(p[1]) });
+    checkRuby(ph, pn); checkRuby(ch, cn);
+    // 県庁所在地が、その県の形の中にあるか(地図の形はかんたんにしてあるので、海岸の市は少し外に出ることがある)
+  }
+  if (prefItems.length !== 47 || capItems.length !== 47) fail('都道府県の数が47でない ' + prefItems.length + '/' + capItems.length);
+  return { w: W, h: H, inset, land, borders, prefs: prefShapes, lakes, items: prefItems.concat(capItems, out, climate), climateTypes: JP_CLIMATE };
 }
 const JP_FIX = {
   赤石山脈: [138.183, 35.574],   // 塩見岳(山脈の中ほど)。元の座標は木曽山脈とほぼ重なっていた
@@ -385,7 +409,22 @@ function buildWorld() {
     climate.push({ id: 'w-climate-' + st + '-' + lv, cat: 'climate', lv, key, koppen: k, segs: parseSegs(CITY_YOMI[st] || st), city: st, x: f1(p[0]), y: f1(p[1]), temp: d.temp, prec: d.prec, south, src: '英語版Wikipedia「' + d.page.replace('Template:', '') + '」の気候表', region: '' });
   }
   for (const t of ['A', 'B', 'C', 'D', 'E']) checkRuby(WC[t].hint, WC[t].name);
-  return { w: W, h: H, sphere, grat, equator, land, borders, items: out.concat(climate), climateTypes: WC };
+  // 世界の国(形パズル)
+  const master = require('../research/countries-master.js');
+  const REG = { asia: 'アジア', europe: 'ヨーロッパ', africa: 'アフリカ', namerica: '北アメリカ', samerica: '南アメリカ', oceania: 'オセアニア' };
+  const cFeats = topojson.feature(cT, cT.objects.countries).features;
+  const countryItems = [];
+  for (const l of fs.readFileSync(D('countries.txt'), 'utf8').split(/\r?\n/).filter(l => l && !l.startsWith('#'))) {
+    const t = l.split('|'), lv = +t[0], iso = t[1], hint = t.slice(2).join('|');
+    const m = master.find(r => r[0] === iso);
+    const f = m && cFeats.find(f => +f.id === +m[1]);
+    if (!f) { fail('国の形なし ' + iso); continue; }
+    const pg = projectGeom(f.geometry, c => proj(c));
+    const slot = SHAPES.slotPoint(pg);
+    countryItems.push({ id: 'w-country-' + iso, cat: 'country', lv, segs: [{ t: m[2] }], title: m[2], region: REG[m[5]], hint, x: f1(slot[0]), y: f1(slot[1]), ...withArea(SHAPES.piece(pg)) });
+    if (lv === 1) checkRuby(hint, m[2]);
+  }
+  return { w: W, h: H, sphere, grat, equator, land, borders, items: countryItems.concat(out, climate), climateTypes: WC };
 }
 
 const jp = buildJapan();
@@ -400,6 +439,6 @@ fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, 'jp.json'), JSON.stringify(jp));
 fs.writeFileSync(path.join(outDir, 'world.json'), JSON.stringify(world));
 const count = (d, c) => [1, 2, 3].map(l => d.items.filter(i => i.cat === c && i.lv === l).length).join('/');
-for (const [n, d] of [['日本', jp], ['世界', world]]) console.log(n, ['cont', 'mount', 'river', 'plain', 'pen', 'climate'].map(c => c + ' ' + count(d, c)).join('  '), (JSON.stringify(d).length / 1024).toFixed(0) + 'KB');
+for (const [n, d] of [['日本', jp], ['世界', world]]) console.log(n, ['pref', 'capital', 'country', 'cont', 'mount', 'river', 'plain', 'pen', 'climate'].map(c => c + ' ' + count(d, c)).join('  '), (JSON.stringify(d).length / 1024).toFixed(0) + 'KB');
 if (RUBY_TODO.length) console.log('\nふりがなが必要な漢字(小学生レベル):\n' + RUBY_TODO.join('\n'));
 if (errors.length) { console.log('\nERRORS:\n' + errors.join('\n')); process.exit(1); }

@@ -57,10 +57,13 @@ const LEVELS = [
   { n: 3, html: '高校生', note: '高校の地理で出てくる、くわしい地名まで。' },
 ];
 const AREAS = {
-  jp: { name: '日本', html: '日本<small>へん</small>', sub: '山地・川・平野・半島・気候' },
-  world: { name: '世界', html: '世界<small>へん</small>', sub: '大陸と海・山脈・川・平野・半島・気候' },
+  jp: { name: '日本', html: '日本<small>へん</small>', sub: '都道府県・県庁所在地・山地・川・平野・半島・気候' },
+  world: { name: '世界', html: '世界<small>へん</small>', sub: '国・大陸と海・山脈・川・平野・半島・気候' },
 };
 const CATS = {
+  pref: { html: '都道府県', plain: '都道府県', ic: '🗾', col: '#e8743b', bg: '#fde3d2' },
+  capital: { html: '県庁所在地', plain: '県庁所在地', ic: '🏛️', col: '#8e5fb8', bg: '#ece2f5' },
+  country: { html: '国', plain: '国', ic: '🌐', col: '#2f9e6b', bg: '#e1f2e8' },
   cont: { html: '大陸と海', plain: '大陸と海', ic: '🌏', col: 'var(--cont)', bg: '#e1eefa' },
   mount: { html: '山地・<ruby>山脈<rt>さんみゃく</rt></ruby>', plain: '山地・山脈', ic: '⛰️', col: 'var(--mount)', bg: '#f3e6da' },
   river: { html: '川', plain: '川', ic: '🌊', col: 'var(--river)', bg: '#dceafa' },
@@ -68,7 +71,17 @@ const CATS = {
   pen: { html: '半島', plain: '半島', ic: '🏝️', col: 'var(--pen)', bg: '#ece2f5' },
   climate: { html: '気候', plain: '気候', ic: '☀️', col: 'var(--climate)', bg: '#fbe8d4' },
 };
-const CAT_ORDER = { jp: ['mount', 'river', 'plain', 'pen', 'climate'], world: ['cont', 'mount', 'river', 'plain', 'pen', 'climate'] };
+const CAT_ORDER = { jp: ['pref', 'capital', 'mount', 'river', 'plain', 'pen', 'climate'], world: ['country', 'cont', 'mount', 'river', 'plain', 'pen', 'climate'] };
+// 形パズル(都道府県・国)のモード: かんたん=ピースに形と名前、むずかしい=形だけ
+const SHAPE_CATS = ['pref', 'country'];
+let MODE = store.get('mode', 'easy');
+const modeKey = cat => SHAPE_CATS.includes(cat) ? ':' + MODE : '';
+const MODES = [{ k: 'easy', html: 'かんたん<small>形と名前</small>' }, { k: 'hard', html: 'むずかしい<small>形だけ</small>' }];
+const shapeSVG = (it, size) => `<svg class="shape" viewBox="${it.shape.vb.join(' ')}" width="${size}" height="${size}" aria-hidden="true"><path d="${it.shape.d}"/></svg>`;
+// ピースの中身(形パズルは形、むずかしいモードでは名前を出さない)
+const pieceHTML = (area, it) => it.shape ? shapeSVG(it, 64) + (MODE === 'easy' ? `<span class="nm">${nameHTML(it.segs)}</span>` : '') : nameHTML(cardSegs(area, it));
+// シートの見出し(むずかしいモードで答えをまだ知らないときは、名前の代わりに形)
+const headHTML = (it, solved) => it.shape && MODE === 'hard' && !solved ? shapeSVG(it, 96) : nameHTML(it.segs);
 const catLabel = (area, cat) => area === 'world' && cat === 'mount' ? '山脈' : CATS[cat].plain;
 const catHTML = (area, cat) => area === 'world' && cat === 'mount' ? '<ruby>山脈<rt>さんみゃく</rt></ruby>' : CATS[cat].html;
 const ruby = html => LEVEL === 1 ? html : html.replace(/<rt>.*?<\/rt>/g, '').replace(/<\/?ruby>/g, '');
@@ -87,8 +100,8 @@ function stagesFor(area, cat, L) {
   else items.sort((a, b) => a.x - b.x);
   const n = items.length, k = Math.ceil(n / 7), out = [];
   for (let s = 0, at = 0; s < k; s++) { const size = Math.round((n - at) / (k - s)); out.push(items.slice(at, at + size)); at += size; }
-  const st = out.map((its, i) => ({ key: `${area}:${L}:${cat}:${i}`, no: i + 1, items: its }));
-  if (n > 7) st.push({ key: `${area}:${L}:${cat}:all`, no: 0, items });
+  const st = out.map((its, i) => ({ key: `${area}:${L}:${cat}:${i}${modeKey(cat)}`, no: i + 1, items: its }));
+  if (n > 7) st.push({ key: `${area}:${L}:${cat}:all${modeKey(cat)}`, no: 0, items });
   return st;
 }
 const regionsOf = items => [...new Set(items.flatMap(i => (i.region || '').split('・')).filter(Boolean))];
@@ -122,7 +135,7 @@ function bindLevels(rerender) {
 // ---------- ホーム
 function home() {
   const jp = DATA.jp;
-  const dots = jp.items.filter(i => i.lv === 1 && i.cat !== 'climate').map((i, n) => `<circle cx="${i.x}" cy="${i.y}" r="9" fill="${CATS[i.cat].col}" stroke="#fff" stroke-width="3" opacity=".9"/>`).join('');
+  const dots = jp.items.filter(i => i.lv === 1 && ['mount', 'river', 'plain', 'pen'].includes(i.cat)).map((i, n) => `<circle cx="${i.x}" cy="${i.y}" r="9" fill="${CATS[i.cat].col}" stroke="#fff" stroke-width="3" opacity=".9"/>`).join('');
   app.innerHTML = `<div class="page">
     <div class="top"><h1>ちりパズル</h1><span class="grow"></span>${soundBtn()}</div>
     <div class="hero"><svg viewBox="-200 -20 ${jp.w + 400} ${jp.h + 40}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
@@ -166,6 +179,8 @@ function catPage(area, cat) {
   app.innerHTML = `<div class="page">
     <div class="top"><button class="back" id="back" aria-label="もどる">←</button><h2>${AREAS[area].name}の${ruby(catHTML(area, cat))}</h2></div>
     <p class="lead">${LEVELS[LEVEL - 1].html.replace(/<rt>.*?<\/rt>|<\/?ruby>/g, '')}レベル ・ ${itemsFor(area, cat, LEVEL).length}こ</p>
+    ${SHAPE_CATS.includes(cat) ? `<div class="levels modes" role="group" aria-label="モード">${MODES.map(m => `<button data-mode="${m.k}" aria-pressed="${MODE === m.k}">${m.html}</button>`).join('')}</div>
+    <p class="levelnote">${MODE === 'easy' ? 'ピースに、形と名前が出るよ。' : 'ピースは形だけ。形を見て、どこかを当てよう。はめると名前が出るよ。'}</p>` : ''}
     <div class="stages">${st.map(s => `<button class="stage" data-key="${s.key}">
       <b>${s.no ? 'ステージ' + s.no : 'ぜんぶ'}</b>
       <small>${s.no ? esc(regionsOf(s.items).slice(0, 3).join('・')) + (regionsOf(s.items).length > 3 ? 'など' : '') : '全部まとめて'} ・ ${s.items.length}こ</small>
@@ -173,6 +188,7 @@ function catPage(area, cat) {
   </div>`;
   app.querySelector('#back').onclick = back;
   app.querySelectorAll('[data-key]').forEach(b => b.onclick = () => go({ s: 'play', area, cat, key: b.dataset.key }));
+  app.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { MODE = b.dataset.mode; store.set('mode', MODE); SE.play('select'); catPage(area, cat); });
 }
 
 // ---------- パズル
@@ -210,7 +226,7 @@ function play(area, cat, key) {
 
   app.innerHTML = `<div class="play">
     <div class="bar"><button class="back" id="back" aria-label="もどる">←</button>
-      <div class="ttl">${AREAS[area].name}の${ruby(catHTML(area, cat))}<small>${stage.no ? 'ステージ' + stage.no : 'ぜんぶ'} ・ ${LEVELS[LEVEL - 1].html.replace(/<rt>.*?<\/rt>|<\/?ruby>/g, '')}レベル</small></div>
+      <div class="ttl">${AREAS[area].name}の${ruby(catHTML(area, cat))}<small>${stage.no ? 'ステージ' + stage.no : 'ぜんぶ'} ・ ${SHAPE_CATS.includes(cat) ? (MODE === 'easy' ? 'かんたん ・ ' : 'むずかしい ・ ') : ''}${LEVELS[LEVEL - 1].html.replace(/<rt>.*?<\/rt>|<\/?ruby>/g, '')}レベル</small></div>
       <span class="count" id="count"></span></div>
     <div class="mapbox" id="mapbox">
       <svg id="map"><g id="vp">${base}<g id="geo">${geo}</g><g id="rings"></g><g id="labels"></g><g id="slots"></g></g></svg>
@@ -343,7 +359,7 @@ function play(area, cat, key) {
     tray.innerHTML = left.length
       ? `<div class="lab">${S.sel ? 'えらんだカードの場所を、地図の番号からさがそう' : 'カードを1まいえらんで、番号までドラッグしよう(タップでもOK)'}</div>` + left.map(id => {
         const it = items.find(i => i.id === id);
-        return `<button class="piece" data-card="${id}" aria-pressed="${S.sel === id}">${nameHTML(cardSegs(area, it))}</button>`;
+        return `<button class="piece${it.shape ? ' shape-piece' : ''}" data-card="${id}" aria-pressed="${S.sel === id}" aria-label="${it.shape && MODE === 'hard' ? '形のピース' : esc(plainName(it.segs))}">${pieceHTML(area, it)}</button>`;
       }).join('')
       : `<div class="lab">ぜんぶ、はまったよ!</div>`;
     tray.querySelectorAll('[data-card]').forEach(b => {
@@ -411,7 +427,7 @@ function play(area, cat, key) {
       return sheet(`<span class="tag">💡 とくちょう</span><h3>${nameHTML(cardSegs(area, card))}</h3><p>${textHTML(ty.hint)}</p>
         <p class="src" style="font-size:13px">地図の番号を、カードをえらばずにタップすると、その町の${ruby('<ruby>雨温図<rt>うおんず</rt></ruby>')}(気温と雨の量のグラフ)が見られるよ。くらべてみよう。</p>`);
     }
-    sheet(`<span class="tag">💡 とくちょう${card.region ? ' ・ ' + esc(card.region) : ''}</span><h3>${nameHTML(card.segs)}</h3><p>${textHTML(card.hint)}</p>`);
+    sheet(`<span class="tag">💡 とくちょう${card.region ? ' ・ ' + esc(card.region) : ''}</span><h3>${headHTML(card, false)}</h3><p>${textHTML(card.hint)}</p>`);
   };
   app.querySelector('#h-two').onclick = () => {
     const card = items.find(i => i.id === S.sel), t = targetFor(card);
@@ -426,7 +442,7 @@ function play(area, cat, key) {
 
   function showInfo(slot, cardId) {
     if (slot.cat === 'climate') return showClimate(slot, true);
-    sheet(`<span class="tag">${esc(slot.region || '')}</span><h3>${nameHTML(slot.segs)}</h3><p>${textHTML(slot.hint)}</p>`);
+    sheet(`<span class="tag">${esc(slot.region || '')}</span><h3>${slot.shape ? shapeSVG(slot, 72) + ' ' : ''}${nameHTML(slot.segs)}</h3><p>${textHTML(slot.hint)}</p>`);
   }
   function showClimate(slot, solved) {
     const ty = typeOf(area, slot);
