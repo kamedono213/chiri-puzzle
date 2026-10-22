@@ -1,5 +1,5 @@
 // 自動生成(tools/build-pages.js)。手で編集しない。
-const CACHE = 'chiri-5968bc0329';
+const CACHE = 'chiri-a0e7f10a8f';
 const PRECACHE = ["./","app.js","data/jp.json","data/world.json","icons/apple-touch-icon.png","icons/icon-192.png","icons/icon-512.png","icons/maskable-512.png","manifest.webmanifest"];
 const LIBS = ["https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"];
 self.addEventListener('install', e => {

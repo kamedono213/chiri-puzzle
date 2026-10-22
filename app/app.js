@@ -72,8 +72,8 @@ const LEVELS = [
   { n: 3, html: '高校生', note: '高校の地理で出てくる、くわしい地名まで。' },
 ];
 const AREAS = {
-  jp: { name: '日本', html: '日本<small>へん</small>', sub: '都道府県・県庁所在地・山地・川・平野・半島・気候' },
-  world: { name: '世界', html: '世界<small>へん</small>', sub: '国・大陸と海・山脈・川・平野・半島・気候' },
+  jp: { name: '日本', html: '日本<small>へん</small>', sub: '都道府県・県庁所在地・山地・川・平野・半島・気候・名産・プレート' },
+  world: { name: '世界', html: '世界<small>へん</small>', sub: '国・大陸と海・山脈・川・平野・半島・気候・プレート' },
 };
 const CATS = {
   pref: { html: '都道府県', plain: '都道府県', ic: '🗾', col: '#e8743b', bg: '#fde3d2' },
@@ -85,8 +85,14 @@ const CATS = {
   plain: { html: '平野', plain: '平野', ic: '🌾', col: 'var(--plain)', bg: '#e4f1dc' },
   pen: { html: '半島', plain: '半島', ic: '🏝️', col: 'var(--pen)', bg: '#ece2f5' },
   climate: { html: '気候', plain: '気候', ic: '☀️', col: 'var(--climate)', bg: '#fbe8d4' },
+  product: { html: '名産(生産量1位)', plain: '名産(生産量1位)', ic: '🍎', col: '#d6455a', bg: '#fbe4e7' },
+  plate: { html: 'プレート', plain: 'プレート', ic: '🧩', col: '#c0392b', bg: '#f7e0dc' },
 };
-const CAT_ORDER = { jp: ['pref', 'capital', 'mount', 'river', 'plain', 'pen', 'climate'], world: ['country', 'cont', 'mount', 'river', 'plain', 'pen', 'climate'] };
+const CAT_ORDER = { jp: ['pref', 'capital', 'mount', 'river', 'plain', 'pen', 'climate', 'product', 'plate'], world: ['country', 'cont', 'mount', 'river', 'plain', 'pen', 'climate', 'plate'] };
+// 同じ答え(気候区・都道府県)の番号が2つ以上あってもよい種類。カードは答えが同じ番号ならどこにはめてもよい
+const KEY_CATS = ['climate', 'product'];
+// プレートの色(はめると、その範囲に色がつく)
+const PLATE_COLORS = ['#e8743b', '#3f7fbf', '#6aa84f', '#8e5fb8', '#d9822b', '#2f9e6b', '#c0392b', '#b0892f', '#5a6fd6', '#d6455a', '#3aa3a3', '#9a6b3f', '#7a8f2f', '#bf3f8f'];
 // 形パズル(都道府県・国)のモード: かんたん=ピースに形と名前、むずかしい=形だけ
 const SHAPE_CATS = ['pref', 'country'];
 let MODE = store.get('mode', 'easy');
@@ -114,7 +120,16 @@ function stagesFor(area, cat, L) {
   if (area === 'jp') items.sort((a, b) => (inInset(area, a) ? 1e4 + a.y : a.y) - (inInset(area, b) ? 1e4 + b.y : b.y));
   else items.sort((a, b) => a.x - b.x);
   const n = items.length, k = Math.ceil(n / 7), out = [];
-  for (let s = 0, at = 0; s < k; s++) { const size = Math.round((n - at) / (k - s)); out.push(items.slice(at, at + size)); at += size; }
+  if (cat === 'product') {
+    // 名産は、1つのステージに同じ県が2つ入らないように配る(多い県から順に、いちばん少ないステージへ)
+    for (let s = 0; s < k; s++) out.push([]);
+    const byPref = {}; items.forEach(i => (byPref[i.key] = byPref[i.key] || []).push(i));
+    Object.values(byPref).sort((a, b) => b.length - a.length).forEach(g => g.forEach(i => {
+      const cand = out.filter(st => !st.some(x => x.key === i.key)); const pool = cand.length ? cand : out;
+      pool.sort((a, b) => a.length - b.length)[0].push(i);
+    }));
+    out.forEach(st => st.sort((a, b) => a.y - b.y));
+  } else for (let s = 0, at = 0; s < k; s++) { const size = Math.round((n - at) / (k - s)); out.push(items.slice(at, at + size)); at += size; }
   const st = out.map((its, i) => ({ key: `${area}:${L}:${cat}:${i}${modeKey(cat)}`, no: i + 1, items: its }));
   if (n > 7) st.push({ key: `${area}:${L}:${cat}:all${modeKey(cat)}`, no: 0, items });
   return st;
@@ -162,7 +177,7 @@ function home() {
       <li>下のカードを、番号までドラッグする</li>
       <li>カードをタップしてから、地図の番号をタップしても、はめられる</li>
       <li>こまったら、ヒント。<b>何回つかっても、星はへらない</b>よ</li></ol></div>
-    <p class="foot">地図・位置: Natural Earth, OpenStreetMap(© OpenStreetMap contributors), Wikipedia/Wikidata。気候: 気象庁の平年値(1991〜2020年)、英語版Wikipediaの気候表。レベル分けは目安です。</p>
+    <p class="foot">地図・位置: Natural Earth, OpenStreetMap(© OpenStreetMap contributors), Wikipedia/Wikidata。気候: 気象庁の平年値(1991〜2020年)、英語版Wikipediaの気候表。プレート: P. Bird (2003) PB2002(H. Ahlenius 版, ODC-BY)。名産: 農林水産省の統計(年はカードごとに表示)。レベル分けは目安です。</p>
   </div>`;
   bindSound();
   bindLevels(home);
@@ -212,7 +227,7 @@ const hash = s => { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0
 const typeOf = (area, item) => DATA[area].climateTypes[item.key];
 // カードの名前(気候は気候区の名前、ほかは地名)
 const cardSegs = (area, item) => item.cat === 'climate' ? (typeOf(area, item).segs || [{ t: typeOf(area, item).name }]) : item.segs;
-const match = (card, slot) => card.cat === 'climate' ? card.key === slot.key : card.id === slot.id;
+const match = (card, slot) => KEY_CATS.includes(card.cat) ? card.key === slot.key : card.id === slot.id;
 
 function play(area, cat, key) {
   const stage = stagesFor(area, cat, LEVEL).find(s => s.key === key);
@@ -237,7 +252,8 @@ function play(area, cat, key) {
        <path d="${D.land}" fill="var(--land)" stroke="var(--land-line)" stroke-width="1.1" vector-effect="non-scaling-stroke"/>
        <path d="${D.borders}" fill="none" stroke="var(--border)" stroke-width=".9" vector-effect="non-scaling-stroke"/>
        <path d="${D.lakes}" fill="var(--sea)" stroke="var(--land-line)" stroke-width=".6" vector-effect="non-scaling-stroke"/>`;
-  const geo = items.map(i => i.d ? `<path class="riverline" data-geo="${i.id}" d="${i.d}"/>` : i.area ? `<path class="area-poly" data-geo="${i.id}" d="${i.area}" fill="${CATS[i.cat].col}" stroke="${CATS[i.cat].col}"/>` : '').join('');
+  const plateLine = cat === 'plate' && D.plateLines ? `<path class="plate-line" d="${D.plateLines}"/>` : '';
+  const geo = plateLine + items.map((i, n) => i.cat === 'plate' && i.area ? `<path class="plate-poly" data-geo="${i.id}" d="${i.area}" fill="${PLATE_COLORS[n % PLATE_COLORS.length]}"/>` : i.d ? `<path class="riverline" data-geo="${i.id}" d="${i.d}"/>` : i.area ? `<path class="area-poly" data-geo="${i.id}" d="${i.area}" fill="${CATS[i.cat].col}" stroke="${CATS[i.cat].col}"/>` : '').join('');
 
   app.innerHTML = `<div class="play">
     <div class="bar"><button class="back" id="back" aria-label="もどる">←</button>
@@ -305,7 +321,8 @@ function play(area, cat, key) {
     }).join('');
     app.querySelector('#labels').innerHTML = [...S.placed.keys()].map(id => {
       const i = items.find(x => x.id === id);
-      const t = i.cat === 'climate' ? i.city + ' ' + typeOf(area, i).name : plainName(i.segs);
+      const c = items.find(x => x.id === S.placed.get(id));
+      const t = i.cat === 'climate' ? i.city + ' ' + typeOf(area, i).name : i.cat === 'product' ? i.title + ' ' + plainName(c.segs) : plainName(i.segs);
       return `<g class="lab" data-x="${i.x}" data-y="${i.y}"><text class="label" x="19" y="5" font-size="14">${esc(t)}</text></g>`;
     }).join('');
     sizeMarks();
@@ -406,7 +423,7 @@ function play(area, cat, key) {
       S.placed.set(id, card.id); S.used.add(card.id); S.sel = null; S.cand = null; clearRing();
       const geoEl = app.querySelector(`[data-geo="${CSS.escape(id)}"]`); if (geoEl) geoEl.classList.add('done');
       drawSlots(); drawTray(); updHints();
-      toast('せいかい! ' + (slot.cat === 'climate' ? slot.city + ' は ' + typeOf(area, slot).name : plainName(slot.segs)));
+      toast('せいかい! ' + (slot.cat === 'climate' ? slot.city + ' は ' + typeOf(area, slot).name : slot.cat === 'product' ? plainName(card.segs) + ' は ' + slot.title : plainName(slot.segs)));
       if (S.placed.size === items.length) setTimeout(finish, 700);
     } else {
       SE.play('ng'); S.miss++;
@@ -420,7 +437,7 @@ function play(area, cat, key) {
   // --- ヒント
   const R = isWorld ? 120 : 64;
   function targetFor(card) { // 同じ気候区が2つ以上あるときは、まだ空いている近い方
-    if (card.cat !== 'climate') return card;
+    if (!KEY_CATS.includes(card.cat)) return card;
     const open = items.filter(i => !S.placed.has(i.id) && i.key === card.key);
     return open.find(i => i.id === card.id) || open[0];
   }
@@ -457,6 +474,7 @@ function play(area, cat, key) {
 
   function showInfo(slot, cardId) {
     if (slot.cat === 'climate') return showClimate(slot, true);
+    if (slot.cat === 'product') { const c = items.find(i => i.id === cardId); return sheet(`<span class="tag">${esc(slot.region || '')}</span><h3>${nameHTML(c.segs)} ・ ${esc(c.title)}</h3><p>${textHTML(c.hint)}</p><p class="src">${esc(c.src)}</p>`); }
     sheet(`<span class="tag">${esc(slot.region || '')}</span><h3>${slot.shape ? shapeSVG(slot, 72) + ' ' : ''}${nameHTML(slot.segs)}</h3><p>${textHTML(slot.hint)}</p>`);
   }
   function showClimate(slot, solved) {

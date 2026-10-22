@@ -263,8 +263,135 @@ function buildJapan() {
     // 県庁所在地が、その県の形の中にあるか(地図の形はかんたんにしてあるので、海岸の市は少し外に出ることがある)
   }
   if (prefItems.length !== 47 || capItems.length !== 47) fail('都道府県の数が47でない ' + prefItems.length + '/' + capItems.length);
-  return { w: W, h: H, inset, land, borders, prefs: prefShapes, lakes, items: prefItems.concat(capItems, out, climate), climateTypes: JP_CLIMATE };
+
+  // 名産(生産量1位)。番号は1位の都道府県の中。同じ県に2つ以上あるときは、県の中で少しずらす
+  const SRC = {
+    F: '農林水産省「令和7年産 果樹生産出荷統計」', V: '農林水産省「令和6年産 野菜生産出荷統計」', R: '北陸農政局・北海道農政事務所「令和7年産水稲の収穫量」(主食用)', T: '農林水産省「畜産統計」(令和8年2月1日現在)',
+  };
+  const YEAR = { F: '令和7年産', V: '令和6年産', R: '令和7年産', T: '令和8年2月1日現在' };
+  const prodLines = fs.readFileSync(D('products.txt'), 'utf8').split(/\r?\n/).filter(l => l && !l.startsWith('#')).map(l => l.split('|'));
+  const prodCount = {};
+  prodLines.forEach(([, , pref]) => prodCount[pref] = (prodCount[pref] || 0) + 1);
+  const prodSeen = {};
+  const products = [];
+  for (const [lv, name, pref, what, share, second, src] of prodLines) {
+    const full = pref === '北海道' ? pref : pref === '東京' ? '東京都' : ['京都', '大阪'].includes(pref) ? pref + '府' : pref + '県';
+    const f = prefFeats.find(f => f.properties.name === full);
+    if (!f) { fail('名産の県がない ' + pref); continue; }
+    if (!SRC[src]) fail('出典キー不明 ' + name);
+    const clue = PREF_CLUE[pref];
+    if (!clue) fail('県の手がかりなし ' + pref);
+    const k = prodSeen[pref] = (prodSeen[pref] || 0) + 1, n = prodCount[pref];
+    let [x, y] = SHAPES.slotPoint(f.geometry);
+    if (n > 1) { const a = (k - 1) / n * Math.PI * 2 - Math.PI / 2, rr = pref === '北海道' ? 40 : 11; x += Math.cos(a) * rr; y += Math.sin(a) * rr; }
+    const segs = parseSegs(name);
+    const whatR = what.replace('収穫量', '{収穫量|しゅうかくりょう}').replace('飼', '{飼|か}');
+    const amount = share === '-' ? (pref === '沖縄' ? '国の{調査|ちょうさ}の{対象|たいしょう}は沖縄県だけ' : '') : `全国の${whatR}の${share}%`;
+    const hint = `${clue}。${amount}(${YEAR[src]})。${second === '-' ? '' : '2位は' + second + '。'}`;
+    if (+lv === 1) checkRuby(hint, name);
+    products.push({ id: 'jp-product-' + name.replace(/:[^/]*/g, '').replace(/\//g, ''), cat: 'product', lv: +lv, key: pref, segs, title: full, pref: full, region: regionOf([pref]), hint, src: SRC[src], x: f1(x), y: f1(y) });
+  }
+
+  // プレートと境目(PB2002)。日本付近だけを描く
+  const inJ = c => c[0] > 121 && c[0] < 150 && c[1] > 22 && c[1] < 48;
+  const plateLines = [];
+  for (const f of PB_B) {
+    if (grp(f.properties.PlateA) === grp(f.properties.PlateB)) continue;
+    for (const l of linesOf(f.geometry)) {
+      let cur = [], prevIn = null;
+      for (const c of l) {
+        if (!inJ(c)) { if (cur.length > 1) plateLines.push(cur); cur = []; prevIn = null; continue; }
+        const ins = isInset(c), p = P(c);
+        // 南西諸島の囲みの線は囲みの中だけ、ふつうの地図の線は囲みの外だけに描く
+        const inBox = p[0] >= inset.x && p[0] <= inset.x + inset.w && p[1] >= inset.y && p[1] <= inset.y + inset.h;
+        if (ins !== inBox) { if (cur.length > 1) plateLines.push(cur); cur = []; prevIn = null; continue; }
+        if (prevIn !== null && ins !== prevIn) { if (cur.length > 1) plateLines.push(cur); cur = []; }
+        cur.push(p); prevIn = ins;
+      }
+      if (cur.length > 1) plateLines.push(cur);
+    }
+  }
+  const plates = [];
+  for (const [lv, label, code, ll, hint] of JP_PLATES) {
+    if (plateOf(ll) !== code) fail(`プレートの位置が ${code} の中にない ${label} ${plateOf(ll)}`);
+    const p = P(ll);
+    plates.push({ id: 'jp-plate-' + label.replace(/:[^/]*/g, '').replace(/\//g, ''), cat: 'plate', lv, segs: parseSegs(label), title: label, region: '', hint, x: f1(p[0]), y: f1(p[1]) });
+  }
+  for (const [lv, label, a, b, test, hint] of JP_BOUNDS) {
+    const ll = midOnBoundary(boundaryPts(a, b, test));
+    if (!ll) { fail('境目の点なし ' + label); continue; }
+    const p = P(ll);
+    plates.push({ id: 'jp-plate-' + label.replace(/:[^/]*/g, '').replace(/\//g, ''), cat: 'plate', lv, segs: parseSegs(label), title: label, region: '', hint, x: f1(p[0]), y: f1(p[1]) });
+  }
+  plates.forEach(i => { if (i.lv === 1) checkRuby(i.hint, i.title); i.region = '日本の近く'; });
+  return { w: W, h: H, inset, land, borders, prefs: prefShapes, lakes, plateLines: lineD(plateLines.map(l => simplifyLine(l, 0.4))), items: prefItems.concat(capItems, out, climate, products, plates), climateTypes: JP_CLIMATE };
 }
+// 名産の「とくちょう」ヒントで使う、県の場所の手がかり(県名は出さない)
+const PREF_CLUE = {
+  北海道: '日本のいちばん北にある', 青森: '本州のいちばん北にある', 山形: '東北地方の日本海側。{最上川|もがみがわ}が流れる', 新潟: '中部地方の日本海側。{信濃川|しなのがわ}が流れる',
+  栃木: '関東地方の北部。海に面していない', 茨城: '関東地方の北東部。太平洋に面している', 群馬: '関東地方の北西部。海に面していない', 埼玉: '関東地方。東京都の北どなり',
+  千葉: '関東地方。太平洋と東京{湾|わん}にはさまれた半島がある', 長野: '中部地方の内陸。高い山にかこまれている', 山梨: '{富士山|ふじさん}の北側。{盆地|ぼんち}がある', 愛知: '中部地方の太平洋側。名古屋市がある',
+  和歌山: '{紀伊|きい}半島の西側', 高知: '四国の南側。太平洋に面している', 愛媛: '四国の北西部。{瀬戸内海|せとないかい}に面している', 熊本: '九州の中央部。{阿蘇山|あそさん}がある',
+  宮崎: '九州の南東部。太平洋に面している', 鹿児島: '九州のいちばん南にある', 沖縄: '日本のいちばん南西にある',
+};
+
+// ======================================================================
+// プレート(Peter Bird「PB2002」(2003)。ODC-BY。fraxen/tectonicplates のGeoJSON)
+// 教科書の大きなプレートにまとめる(小さなプレートは、となりの大きなプレートに入れる)
+// ======================================================================
+const PB_B = readJSON(R('raw/PB2002_boundaries.json')).features;
+const PB_P = readJSON(R('raw/PB2002_plates.json')).features.map(f => fixWinding(f));
+const PLATE_GROUP = {
+  EU: 'EU', AM: 'EU', YA: 'EU', SU: 'EU', ON: 'EU', BU: 'EU', AS: 'EU', AT: 'EU', MS: 'EU',
+  NA: 'NA', OK: 'NA', PA: 'PA', KE: 'PA', TO: 'PA', NI: 'PA', FT: 'PA', CR: 'PA', BR: 'PA', NB: 'PA', MN: 'PA', CL: 'PA',
+  PS: 'PS', MA: 'PS', AU: 'IA', IN: 'IA', TI: 'IA', BS: 'IA', BH: 'IA', MO: 'IA', WL: 'IA', SB: 'IA', SS: 'IA', NH: 'IA',
+  AF: 'AF', SO: 'AF', SA: 'SA', AP: 'SA', ND: 'SA', SC: 'SC', SL: 'SC', SW: 'SC', NZ: 'NZ', EA: 'NZ', JZ: 'NZ', GP: 'NZ',
+  CO: 'CO', RI: 'CO', CA: 'CA', PM: 'CA', AR: 'AR', JF: 'JF', AN: 'AN',
+};
+function grp(c) { if (!PLATE_GROUP[c]) fail('プレートのグループ不明 ' + c); return PLATE_GROUP[c]; }
+// d3 は外周が時計回りの多角形を「内側」とみなす。逆向きなら裏返す
+function fixWinding(f) {
+  if (d3.geoArea(f) <= 2 * Math.PI) return f;
+  const rev = poly => poly.map(r => r.slice().reverse());
+  const g = f.geometry.type === 'Polygon' ? { type: 'Polygon', coordinates: rev(f.geometry.coordinates) } : { type: 'MultiPolygon', coordinates: f.geometry.coordinates.map(rev) };
+  return { type: 'Feature', properties: f.properties, geometry: g };
+}
+function linesOf(g) { return g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : []; }
+const plateOf = ll => (PB_P.find(f => d3.geoContains(f, ll)) || { properties: {} }).properties.Code;
+// 2つのプレート(のグループ)の境目の点のうち、条件に合うもの
+function boundaryPts(a, b, test) {
+  const pts = [];
+  for (const f of PB_B) {
+    const A = f.properties.PlateA, B = f.properties.PlateB;
+    if (!((a.includes(A) && b.includes(B)) || (a.includes(B) && b.includes(A)))) continue;
+    for (const l of linesOf(f.geometry)) for (const c of l) if (test(c)) pts.push(c);
+  }
+  return pts;
+}
+// 点の重心にいちばん近い、境目の上の点
+function midOnBoundary(pts) {
+  if (!pts.length) return null;
+  const c = [pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length];
+  return pts.reduce((b, p) => km(p, c) < km(b, c) ? p : b);
+}
+// 日本付近のプレート: [レベル, 名前, PB2002のコード(位置の検算用), 番号の位置(経度,緯度), ヒント]
+// 東北・北海道は教科書では北アメリカプレート(PB2002ではオホーツクプレート OK として分けている)、西日本はユーラシアプレート(同じくアムールプレート AM)
+const JP_PLATES = [
+  [1, '北:きた/アメリカ/プレート', 'OK', [141.2, 40.0], '東北地方や北海道がのっている。東日本の下にある。'],
+  [1, 'ユーラシア/プレート', 'AM', [133.5, 35.0], '西日本や、ユーラシア大陸がのっている。'],
+  [1, '太平洋:たいへいよう/プレート', 'PA', [146.5, 37.0], '太平洋の下にある大きなプレート。東から日本の下にしずみこんでいる。'],
+  [1, 'フィリピン/海:かい/プレート', 'PS', [136.5, 31.2], '日本の南の海にある。南から西日本の下にしずみこんでいる。'],
+];
+// 海溝・トラフ・構造線: [レベル, 名前, プレートA, プレートB, 範囲, ヒント]
+const JP_BOUNDS = [
+  [2, '日本:にほん/海溝:かいこう', ['PA'], ['OK'], c => c[1] > 35.5 && c[1] < 40.5, '東北地方の東の海の、とても深いみぞ。太平洋プレートがしずみこむところ。'],
+  [2, '千島:ちしま/海溝:かいこう', ['PA'], ['OK'], c => c[1] > 40.9 && c[1] < 44 && c[0] > 144.5, '北海道の東の海の、深いみぞ。'],
+  [2, '伊豆:いず/・/小笠原:おがさわら/海溝:かいこう', ['PA'], ['PS'], c => c[1] > 30.5 && c[1] < 34, '関東地方の南の海を、南北にのびる深いみぞ。'],
+  [2, '南海:なんかい/トラフ', ['PS'], ['AM'], c => c[0] > 132.8 && c[0] < 138.6, '四国や紀伊半島の南の海の、ゆるやかなみぞ。大きな地震がくり返し起きている。'],
+  [3, '相模:さがみ/トラフ', ['PS'], ['OK'], c => c[0] > 139.2 && c[0] < 141.5, '関東地方の南の海。1923年の関東大震災はこのあたりで起きた。'],
+  [3, '南西:なんせい/諸島:しょとう/海溝:かいこう', ['PS'], ['ON'], c => c[1] > 24.5 && c[1] < 30.5, '沖縄など南西諸島の南東の海の、深いみぞ。琉球海溝ともいう。'],
+  [3, '糸魚川:いといがわ/-/静岡:しずおか/構造線:こうぞうせん', ['OK'], ['AM'], c => c[1] > 35.0 && c[1] < 37.1, '本州の中央をたてに横切る大きな断層。北アメリカプレートとユーラシアプレートの境目と考えられている(いろいろな説がある)。'],
+];
 const JP_FIX = {
   赤石山脈: [138.183, 35.574],   // 塩見岳(山脈の中ほど)。元の座標は木曽山脈とほぼ重なっていた
   木曽山脈: [137.804, 35.789],   // 木曽駒ヶ岳
@@ -424,8 +551,60 @@ function buildWorld() {
     countryItems.push({ id: 'w-country-' + iso, cat: 'country', lv, segs: [{ t: m[2] }], title: m[2], region: REG[m[5]], hint, x: f1(slot[0]), y: f1(slot[1]), ...withArea(SHAPES.piece(pg)) });
     if (lv === 1) checkRuby(hint, m[2]);
   }
-  return { w: W, h: H, sphere, grat, equator, land, borders, items: countryItems.concat(out, climate), climateTypes: WC };
+  // プレート(PB2002を教科書の大きなプレートにまとめる)。はめると、そのプレートの範囲に色がつく
+  const pT = sphTopo({ type: 'FeatureCollection', features: PB_P.map(f => ({ type: 'Feature', properties: { g: grp(f.properties.Code) }, geometry: f.geometry })) }, 1e-7);
+  const groupGeom = g => fixWinding({ type: 'Feature', properties: {}, geometry: topojson.merge(pT, pT.objects.f.geometries.filter(o => o.properties.g === g)) });
+  const wLines = [];
+  for (const f of PB_B) {
+    const A = f.properties.PlateA, B = f.properties.PlateB;
+    const riftAfrica = [A, B].sort().join() === 'AF,SO'; // 東アフリカ大地溝帯も線で見せる
+    if (grp(A) === grp(B) && !riftAfrica) continue;
+    linesOf(f.geometry).forEach(l => wLines.push(l));
+  }
+  const plateLines = gp({ type: 'MultiLineString', coordinates: wLines });
+  const plates = [];
+  for (const [lv, label, g, ll, hint] of W_PLATES) {
+    const geom = groupGeom(g);
+    if (!d3.geoContains(geom, ll)) fail('プレートの位置が範囲の外 ' + label);
+    const p = proj(ll);
+    plates.push({ id: 'w-plate-' + g, cat: 'plate', lv, segs: parseSegs(label), title: label, region: W_PLATE_REGION[g], hint, area: gp(geom), x: f1(p[0]), y: f1(p[1]) });
+  }
+  for (const [lv, label, a, b, test, region, hint] of W_BOUNDS) {
+    const ll = midOnBoundary(boundaryPts(a, b, test));
+    if (!ll) { fail('境目の点なし ' + label); continue; }
+    const p = proj(ll);
+    plates.push({ id: 'w-plate-' + label.replace(/:[^/]*/g, '').replace(/\//g, ''), cat: 'plate', lv, segs: parseSegs(label), title: label, region, hint, x: f1(p[0]), y: f1(p[1]) });
+  }
+  plates.forEach(i => { if (i.lv === 1) checkRuby(i.hint, i.title); });
+  return { w: W, h: H, sphere, grat, equator, land, borders, plateLines, items: countryItems.concat(out, climate, plates), climateTypes: WC };
 }
+// 世界のプレート: [レベル, 名前, グループ, 番号の位置(経度,緯度), ヒント]
+const W_PLATES = [
+  [1, 'ユーラシア/プレート', 'EU', [90, 52], 'ヨーロッパとアジアの大部分がのっている、大きなプレート。西日本もこのプレートの上。'],
+  [1, '北:きた/アメリカ/プレート', 'NA', [-100, 50], '北アメリカ大陸と、大西洋の北西部がのっている。東日本もこのプレートの上。'],
+  [1, '南:みなみ/アメリカ/プレート', 'SA', [-58, -12], '南アメリカ大陸と、大西洋の南西部がのっている。'],
+  [1, 'アフリカ/プレート', 'AF', [18, 5], 'アフリカ大陸がのっている。'],
+  [1, '太平洋:たいへいよう/プレート', 'PA', [-160, 5], 'いちばん大きなプレート。ほとんどが海の底。'],
+  [1, 'インド・オーストラリア/プレート', 'IA', [132, -25], 'オーストラリア大陸とインドがのっている。インドとオーストラリアを別のプレートに分けることもある。'],
+  [1, '南極:なんきょく/プレート', 'AN', [100, -78], '南極大陸と、そのまわりの海がのっている。'],
+  [2, 'ナスカ/プレート', 'NZ', [-90, -20], '南アメリカの西の太平洋の下。南アメリカプレートの下にしずみこみ、アンデス山脈ができた。'],
+  [2, 'フィリピン/海:かい/プレート', 'PS', [133, 20], '日本の南からフィリピンにかけての海の下。'],
+  [2, 'ココス/プレート', 'CO', [-95, 8], '中央アメリカの西の太平洋の下にある、小さなプレート。'],
+  [2, 'カリブ/プレート', 'CA', [-75, 15], 'カリブ海の下にある。'],
+  [2, 'アラビア/プレート', 'AR', [45, 22], 'アラビア半島がのっている。'],
+  [3, 'スコシア/プレート', 'SC', [-45, -57], '南アメリカの南のはしと南極のあいだの海の下。'],
+  [3, 'フアン・デ・フカ/プレート', 'JF', [-128, 46], '北アメリカの西海岸の沖にある、とても小さなプレート。'],
+];
+const W_PLATE_REGION = { EU: 'ユーラシア大陸', NA: '北アメリカ', SA: '南アメリカ', AF: 'アフリカ', PA: '太平洋', IA: 'インド洋・オセアニア', AN: '南極', NZ: '太平洋の南東', PS: '太平洋の北西', CO: '中央アメリカの西', CA: '中央アメリカ', AR: '西アジア', SC: '南アメリカの南', JF: '北アメリカの西' };
+// 世界の境目: [レベル, 名前, プレートA, プレートB, 範囲, 地域, ヒント]
+const W_BOUNDS = [
+  [3, '大西洋:たいせいよう/中央:ちゅうおう/海嶺:かいれい', ['AF'], ['SA'], c => c[1] > -35 && c[1] < 0, '大西洋', '大西洋のまん中を南北にのびる、海の底の山脈。プレートが左右に広がっていく境目。'],
+  [3, '東:ひがし/太平洋:たいへいよう/海膨:かいぼう', ['PA'], ['NZ'], c => c[1] > -30 && c[1] < -5, '太平洋の南東', '太平洋の東の海底の、なだらかな高まり。プレートが広がっていく境目。'],
+  [3, 'サンアンドレアス/断層:だんそう', ['PA'], ['NA'], c => c[1] > 34 && c[1] < 38.5 && c[0] < -117, '北アメリカの西', 'アメリカ合衆国のカリフォルニア州を通る。プレートどうしが横にずれる境目。'],
+  [3, '東:ひがし/アフリカ/大地溝帯:だいちこうたい', ['AF'], ['SO'], c => c[1] > -10 && c[1] < 10 && c[0] > 30 && c[0] < 42, 'アフリカ', 'アフリカ大陸の東部を南北にのびる、大きな谷。大陸がさけていくところ。'],
+  [3, 'マリアナ/海溝:かいこう', ['PA'], ['MA'], c => true, '太平洋の北西', '世界でいちばん深い海溝。深さは約1万m。'],
+  [3, 'ペルー・チリ/海溝:かいこう', ['NZ'], ['SA', 'AP', 'ND'], c => c[1] > -30 && c[1] < -8, '南アメリカの西', '南アメリカの西の海の、深いみぞ。ナスカプレートがしずみこむところ。'],
+];
 
 const jp = buildJapan();
 const world = buildWorld();
@@ -439,6 +618,6 @@ fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, 'jp.json'), JSON.stringify(jp));
 fs.writeFileSync(path.join(outDir, 'world.json'), JSON.stringify(world));
 const count = (d, c) => [1, 2, 3].map(l => d.items.filter(i => i.cat === c && i.lv === l).length).join('/');
-for (const [n, d] of [['日本', jp], ['世界', world]]) console.log(n, ['pref', 'capital', 'country', 'cont', 'mount', 'river', 'plain', 'pen', 'climate'].map(c => c + ' ' + count(d, c)).join('  '), (JSON.stringify(d).length / 1024).toFixed(0) + 'KB');
+for (const [n, d] of [['日本', jp], ['世界', world]]) console.log(n, ['pref', 'capital', 'country', 'cont', 'mount', 'river', 'plain', 'pen', 'climate', 'product', 'plate'].map(c => c + ' ' + count(d, c)).join('  '), (JSON.stringify(d).length / 1024).toFixed(0) + 'KB');
 if (RUBY_TODO.length) console.log('\nふりがなが必要な漢字(小学生レベル):\n' + RUBY_TODO.join('\n'));
 if (errors.length) { console.log('\nERRORS:\n' + errors.join('\n')); process.exit(1); }
