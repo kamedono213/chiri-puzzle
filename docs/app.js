@@ -177,6 +177,7 @@ function home() {
       <li>下のカードを、番号までドラッグする</li>
       <li>カードをタップしてから、地図の番号をタップしても、はめられる</li>
       <li>こまったら、ヒント。<b>何回つかっても、星はへらない</b>よ</li></ol></div>
+    <a class="shop" href="https://kentei-drill.booth.pm/items/9034136" target="_blank" rel="noopener"><b>紙で練習したい人へ: 日本の白地図ワーク(PDF)</b><span>都道府県・県庁所在地・山地・川・平野・半島・名産の書きこみプリント(答えつき・BOOTH・500円)</span></a>
     <p class="foot">地図・位置: Natural Earth, OpenStreetMap(© OpenStreetMap contributors), Wikipedia/Wikidata。気候: 気象庁の平年値(1991〜2020年)、英語版Wikipediaの気候表。プレート: P. Bird (2003) PB2002(H. Ahlenius 版, ODC-BY)。名産: 農林水産省の統計(年はカードごとに表示)。レベル分けは目安です。</p>
   </div>`;
   bindSound();
