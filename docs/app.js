@@ -1,6 +1,57 @@
 // ちりパズル: 山地・川・平野・半島・気候のカードを、白地図の正しい番号にはめるパズル。
 // 地図とデータは tools/build-data.js が作った data/jp.json・data/world.json を読む。
 'use strict';
+
+// 「もどる」「やめる」を押したら、本当にもどるか確かめる(スマホの「戻る」操作も)。
+// 画面のボタンは id="back" / id="quit"。もともと確認があるボタンは data-noconfirm をつけて除く
+(() => {
+  let bypass = false, ignorePop = false;
+  const pass = fn => { bypass = true; fn(); setTimeout(() => { bypass = false; }, 500); };
+  const ask = onYes => {
+    if (document.getElementById('leave-confirm')) return;
+    const d = document.createElement('div');
+    d.id = 'leave-confirm'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true');
+    d.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:16px';
+    d.innerHTML = '<div style="background:#fff;color:#222;border-radius:16px;padding:20px 18px;max-width:320px;width:100%;display:grid;gap:14px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.25)">'
+      + '<b style="font-size:18px">本当にもどりますか？</b><span style="font-size:14px;color:#555">いまの続きは消えることがあります。</span>'
+      + '<div style="display:flex;gap:10px"><button type="button" data-a="no" style="flex:1;padding:12px;border-radius:12px;border:1px solid #ccc;background:#fff;color:#222;font:inherit;font-weight:700">つづける</button>'
+      + '<button type="button" data-a="yes" style="flex:1;padding:12px;border-radius:12px;border:0;background:#2f6fd0;color:#fff;font:inherit;font-weight:700">もどる</button></div></div>';
+    d.addEventListener('click', e => {
+      const a = e.target.closest('[data-a]');
+      if (!a && e.target !== d) return;
+      d.remove();
+      if (a && a.dataset.a === 'yes') onYes();
+    });
+    document.body.appendChild(d);
+    d.querySelector('[data-a="no"]').focus();
+  };
+  document.addEventListener('click', e => {
+    const b = e.target.closest('#back, #quit');
+    if (!b || bypass || b.hasAttribute('data-noconfirm')) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    ask(() => pass(() => b.click()));
+  }, true);
+  // ROUTED: このアプリが画面ごとに履歴を積むか。積まないアプリは、戻る操作を受け止める「しおり」を1つ積んでおく
+  const ROUTED = true;
+  const guard = () => history.pushState({ leaveGuard: 1 }, '');
+  if (!ROUTED) guard();
+  window.addEventListener('popstate', e => {
+    if (ignorePop) { ignorePop = false; e.stopImmediatePropagation(); return; }
+    if (bypass) return;
+    e.stopImmediatePropagation();
+    if (!ROUTED) {
+      const b = document.querySelector('#back, #quit');
+      if (!b) { history.back(); return; }                 // メニュー画面ではそのままアプリを閉じる
+      guard();
+      if (b.hasAttribute('data-noconfirm')) { b.click(); return; }
+      ask(() => pass(() => b.click()));
+      return;
+    }
+    ignorePop = true; history.go(1); // いったん元の画面にとどまる
+    ask(() => pass(() => history.back()));
+  }, true);
+})();
+
 const app = document.getElementById('app');
 const DATA = {};
 
